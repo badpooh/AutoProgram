@@ -2,6 +2,21 @@ import cv2
 import numpy as np
 from paddleocr import PaddleOCR
 from itertools import chain
+import sys
+import os
+import paddle
+import math
+import time
+import collections
+from PIL import Image
+from pathlib import Path
+import tarfile
+import urllib.request
+from openvino.runtime import Core
+import copy
+
+sys.path.append("../utils")
+
 
 from demo_test.demo_config import ConfigSetup
 from demo_test.demo_config import ConfigROI as ecroi
@@ -37,8 +52,49 @@ class OCRManager:
         if image is None:
             print(f"이미지를 읽을 수 없습니다: {image}")
             return []
+        def run_model_download(model_url, model_file_path):
+            model_name = model_url.split("/")[-1]
+        
+            if model_file_path.is_file(): 
+                print("Model already exists")
+            else:
+                print("Downloading the pre-trained model... May take a while...")
+                os.makedirs("model", exist_ok=True)
+                urllib.request.urlretrieve(model_url, f"model/{model_name} ")
+                print("Model Downloaded")
+                file = tarfile.open(f"model/{model_name} ")
+                res = file.extractall("model")
+                file.close()
+                if not res:
+                    print(f"Model Extracted to {model_file_path}.")
+                else:
+                    print("Error Extracting the model. Please check the network.")
+        
+        
+        det_model_url = "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar"
+        det_model_dir = "model/en_PP-OCRv3_det_infer"
 
-        ocr = PaddleOCR(use_angle_cls=False, lang='en', use_space_char=True, show_log=False)
+        rec_model_url = "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_rec_infer.tar"
+        rec_model_dir = "model/en_PP-OCRv3_rec_infer"
+        
+        # run_model_download(det_model_url, Path(det_model_dir + "/inference.pdmodel"))
+        # run_model_download(rec_model_url, Path(rec_model_dir + "/inference.pdmodel"))
+        
+        # core = Core()
+        # det_model = core.read_model(model=det_model_file_path)
+        # det_compiled_model = core.compile_model(model=det_model, device_name="GPU")
+
+        ocr = PaddleOCR(
+            det_model_dir=det_model_dir,
+            rec_model_dir=rec_model_dir,
+            use_angle_cls=False,
+            lang='en',
+            use_space_char=True,
+            show_log=False,
+            use_gpu=False,    # OpenVINO 사용 시 False로 설정
+            device='GPU',     # GPU 디바이스 지정
+            use_openvino=True # OpenVINO 백엔드 사용
+        )
 
         ocr_results = {}
         for roi_key in roi_keys:
@@ -249,9 +305,9 @@ class OCRManager:
 if __name__ == "__main__":
     ocr_manager = OCRManager()
 
-    image_path = r"C:\Users\Jin\Desktop\Company\Rootech\PNT\AutoProgram\image_test\10.10.26.159_2024-12-02_16_41_13_M_H_AN_Curr_Unbal.png"
+    image_path = r"C:\Users\Jin\Desktop\Company\Rootech\PNT\AutoProgram\image_test\phasor\10.10.26.159_2024-08-26_17_04_39_M_H_AN_Phasor.png"
 
-    roi_keys_meas = [ecroi.curr_per_c]
+    roi_keys_meas = [ecroi.phasor_title, ecroi.phasor_vl_vn, ecroi.phasor_voltage, ecroi.phasor_a_c_vol, ecroi.phasor_current, ecroi.phasor_a_c_cur, ecroi.phasor_a_meas, ecroi.phasor_b_meas, ecroi.phasor_c_meas, ecroi.phasor_a_meas_cur, ecroi.phasor_b_meas_cur, ecroi.phasor_c_meas_cur, ecroi.phasor_a_angle, ecroi.phasor_b_angle, ecroi.phasor_c_angle, ecroi.phasor_a_angle_cur, ecroi.phasor_b_angle_cur, ecroi.phasor_c_angle_cur]
 
     results = ocr_manager.ocr_basic(image_path, roi_keys_meas)
     print(f"OCR 결과: {results}")
